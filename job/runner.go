@@ -39,8 +39,10 @@ func (j *JobRunner) Run(cache JobCache) (*JobStat, Metadata, error) {
 		log.Infof("Job %s tried to run, but exited early because its disabled.", j.job.Name)
 		return nil, j.meta, ErrJobDisabled
 	}
-
+	startTime := time.Now()
+	metrics := cache.GetMetrics()
 	log.Infof("Job %s:%s started.", j.job.Name, j.job.Id)
+	metrics.JobsTotal.WithLabelValues("started").Inc()
 
 	j.runSetup()
 
@@ -53,11 +55,13 @@ func (j *JobRunner) Run(cache JobCache) (*JobStat, Metadata, error) {
 		} else {
 			err = ErrJobTypeInvalid
 		}
+		metrics.JobsDuration.Observe(time.Since(startTime).Seconds())
 
 		if err != nil {
 			// Log Error in Metadata
 			// TODO - Error Reporting, email error
 			log.Errorf("Run Command got an Error: %s", err)
+			metrics.JobsTotal.WithLabelValues("errored").Inc()
 
 			j.meta.ErrorCount++
 			j.meta.LastError = time.Now()
@@ -79,6 +83,7 @@ func (j *JobRunner) Run(cache JobCache) (*JobStat, Metadata, error) {
 	}
 
 	log.Infof("Job %s:%s finished.", j.job.Name, j.job.Id)
+	metrics.JobsTotal.WithLabelValues("succeeded").Inc()
 	j.meta.SuccessCount++
 	j.meta.NumberOfFinishedRuns++
 	j.meta.LastSuccess = time.Now()
